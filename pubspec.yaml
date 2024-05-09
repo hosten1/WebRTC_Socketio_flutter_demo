@@ -49,6 +49,8 @@ dev_dependencies:
   http: ^1.2.1
   socket_io_client:
     path: ./lib/depends/socket.io-client-dart/
+  flutter_webrtc:
+    path: ./lib/depends/flutter-webrtc/
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
