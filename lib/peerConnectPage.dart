@@ -40,6 +40,10 @@ class _LPeerConnectionState extends State<LPeerConnection> {
   }
 
   void _createPeerConnection() async {
+    if(_peerConnection != null){
+      print("===> lym _peerConnection already ");
+      return;
+    }
     Map<String, dynamic> _iceServers = {
       'iceServers': [
         {
@@ -71,10 +75,12 @@ class _LPeerConnectionState extends State<LPeerConnection> {
     _peerConnection!.onIceCandidate = (candidate) {
       // print('lym candidate :${candidate.toString()}');
       var person = {
-        'type': 0,
-        'sdp': {'type': 2, 'candidate': candidate.toMap()},
+        'roomId': _roomID,
+        'id': _ownerId,
+        'type': 2,
+        'candidate': candidate.toMap(),
       };
-      _socketIOClient?.socket.emit('message', [_roomID, _ownerId, person]);
+      _socketIOClient?.socket.emit('message', person);
     };
     _peerConnection?.onAddTrack = (stream, track) {
       _remoteRenderer.srcObject = stream;
@@ -138,7 +144,7 @@ class _LPeerConnectionState extends State<LPeerConnection> {
                     // ),
                     FloatingActionButton(
                       onPressed: () {
-                        _disconnect();
+                        // _disconnect();
                       },
                       tooltip: 'Hangup',
                       child: Icon(Icons.call_end),
@@ -192,13 +198,15 @@ class _LPeerConnectionState extends State<LPeerConnection> {
   void _createOffer() async {
     var offer = await _peerConnection?.createOffer();
     var person = {
+      'roomId': _roomID,
+      'id': _ownerId,
       'type': 0,
       'sdp': {'type': offer?.type, 'sdp': offer?.sdp},
     };
 
     var json = jsonEncode(person);
 
-    _socketIOClient?.socket.emit('message', [_roomID, _ownerId, person]);
+    _socketIOClient?.socket.emit('message', person);
     _peerConnection?.setLocalDescription(offer!);
 
     print('lym offer sdp:${offer?.sdp}');
@@ -206,14 +214,17 @@ class _LPeerConnectionState extends State<LPeerConnection> {
 
   void _createAnswer() async {
     var answer = await _peerConnection?.createAnswer();
+    print('lym >>>>> _createAnswer');
     var person = {
+      'roomId': _roomID,
+      'id': _ownerId,
       'type': 1,
       'sdp': {'type': answer?.type, 'sdp': answer?.sdp},
     };
 
     var json = jsonEncode(person);
 
-    _socketIOClient?.socket.emit('message', [_roomID, _ownerId, person]);
+    _socketIOClient?.socket.emit('message', person);
     _peerConnection?.setLocalDescription(answer!);
 
     print('lym answer sdp:${answer?.sdp}');
@@ -267,11 +278,11 @@ class _LPeerConnectionState extends State<LPeerConnection> {
   }
 
   _switchCamera() {
-    print("====>_switchCamera1");
-    if (_localStream != null) {
-      print("====>_switchCamera2");
-      Helper.switchCamera(_localStream!.getVideoTracks()[0]);
-    }
+    // print("====>_switchCamera1");
+    // if (_localStream != null) {
+    //   print("====>_switchCamera2");
+    //   Helper.switchCamera(_localStream!.getVideoTracks()[0]);
+    // }
   }
 
   //  _switchToScreenSharing(MediaStream stream) {
@@ -287,10 +298,10 @@ class _LPeerConnectionState extends State<LPeerConnection> {
   // }
 
   _muteMic() {
-    if (_localStream != null) {
-      bool enabled = _localStream!.getAudioTracks()[0].enabled;
-      _localStream!.getAudioTracks()[0].enabled = !enabled;
-    }
+    // if (_localStream != null) {
+    //   bool enabled = _localStream!.getAudioTracks()[0].enabled;
+    //   _localStream!.getAudioTracks()[0].enabled = !enabled;
+    // }
   }
 
   void _connection() async {
@@ -302,7 +313,7 @@ class _LPeerConnectionState extends State<LPeerConnection> {
   void _disconnect() async {
     if (_socketIOClient != null) {
       _socketIOClient?.socket
-          .emitWithAck("leave", [_roomID, _ownerId], ack: (data) {});
+          .emitWithAck("leave", _roomID, ack: (data) {});
     }
     if (_localStream != null) {
       _localStream!.getTracks().forEach((element) async {
@@ -331,19 +342,20 @@ class _LPeerConnectionState extends State<LPeerConnection> {
     _roomID = data.roomId;
     print("lym >>>>> _initSignal:${_roomID}");
     _socketIOClient?.socket.on('joined', (data) {
+      print("lym >>>>> joined:${data}");
       // const {room, id} = data;
       final String id = data["id"] as String;
-      final String room = data["room"] as String;
+      final String room = data["roomId"] as String;
       _createPeerConnection();
       _ownerId = id;
     });
     _socketIOClient?.socket.on('otherJoined', (data) {
-      // const {room, id} = data;
+      print("lym >>>>> otherJoined:${data}");
       final String id = data["id"] as String;
       if (_ownerId == id) {
         return;
       }
-      final String room = data["room"] as String;
+      final String room = data["roomId"] as String;
       print("other joined id:$id ownerid:${_ownerId} room:${room}");
       // outputArea.scrollTop = outputArea.scrollHeight;//窗口总是显示最后的内容
       // outputArea.value = outputArea.value + 'otherJoined' + id + '\r';
@@ -353,11 +365,12 @@ class _LPeerConnectionState extends State<LPeerConnection> {
       _createOffer();
     });
     _socketIOClient?.socket.on('leaved', (data) {
+      print("lym >>>>> leaved:${data}");
       final String id = data["id"] as String;
       if (_ownerId == id) {
         return;
       }
-      final String room = data["room"] as String;
+      final String room = data["roomId"] as String;
 
       // outputArea.scrollTop = outputArea.scrollHeight;//窗口总是显示最后的内容
       // outputArea.value = outputArea.value + 'otherJoined' + id + '\r';
@@ -369,12 +382,13 @@ class _LPeerConnectionState extends State<LPeerConnection> {
     });
 
     _socketIOClient?.socket.on('message', (data) {
+      print("lym >>>>> message:${data}");
       final String id = data["id"] as String;
       if (_ownerId == id) {
         return;
       }
 
-      final Int type = data["type"] as Int;
+      final int type = data["type"] as int;
       switch (type) {
         case 0: // offer
           _isOffer = false;
@@ -390,9 +404,9 @@ class _LPeerConnectionState extends State<LPeerConnection> {
         case 2: // candidate
           _peerConnection
               ?.addCandidate(RTCIceCandidate(
-                  data['sdp']['candidate']['candidate'],
-                  data['sdp']['candidate']['sdpMid'],
-                  data['sdp']['candidate']['sdpMLineIndex']))
+                  data['candidate']['candidate'],
+                  data['candidate']['sdpMid'],
+                  data['candidate']['sdpMLineIndex']))
               .then((value) => () {})
               .onError((error, stackTrace) => () {
                     print('lym error:$error');
