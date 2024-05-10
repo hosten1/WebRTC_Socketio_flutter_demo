@@ -5,6 +5,30 @@ import 'package:webrtc_demo_flutter/peerConnectPage.dart';
 
 import 'network/socket_io_client.dart';
 
+class LServerData {
+  final String roomId;
+  final String? serverAddr;
+  final SocketIOClient? socketIOClient; 
+
+  LServerData({required this.roomId,this.serverAddr, this.socketIOClient});
+
+  Map<String, dynamic> toMap() {
+    return {
+      'roomId': roomId,
+      'serverAddr': serverAddr,
+      'socketIOClient': this.socketIOClient,
+    };
+  }
+
+  factory LServerData.fromMap(Map<String, dynamic> map) {
+    return LServerData(
+      roomId: map['roomId'] ?? '',
+      serverAddr: map['serverAddr'] ?? '',
+      socketIOClient: map['socketIOClient'] ?? '',
+    );
+  }
+}//class LServerData 
+
 class LApp extends StatelessWidget {
   const LApp({super.key});
 
@@ -112,8 +136,8 @@ class _MyHomePageState extends State<LHomePage> {
                   String inputText1 = _roomController.text;
                   print('Input Text: $inputText1');
                   if(inputText1.isNotEmpty){
-                    _socketIOClient.socket.emit('join', inputText1);
-                    Navigator.pushNamed(context, LPeerConnection.routeName, arguments: _socketIOClient);
+                    // _socketIOClient.socket.emit('join', inputText1);
+                    Navigator.pushNamed(context, LPeerConnection.routeName, arguments: LServerData(roomId: inputText1,socketIOClient: _socketIOClient));
                   }
                 },
                 child: const Text("加入房间")

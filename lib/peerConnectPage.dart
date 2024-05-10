@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:ffi';
 
 import 'package:flutter/material.dart';
+import 'package:webrtc_demo_flutter/LHomePage.dart';
 import 'package:webrtc_demo_flutter/depends/flutter-webrtc/lib/flutter_webrtc.dart';
 import 'package:webrtc_demo_flutter/network/socket_io_client.dart';
 
@@ -15,6 +17,7 @@ class LPeerConnection extends StatefulWidget {
 
 class _LPeerConnectionState extends State<LPeerConnection> {
   SocketIOClient? _socketIOClient;
+  String _roomID = "123456";
 
   // _LPeerConnectionState(this._socketIOClient);
 
@@ -25,9 +28,12 @@ class _LPeerConnectionState extends State<LPeerConnection> {
 
   MediaStream? _localStream;
   bool _inCalling = false;
+
   bool _isTorchOn = false;
   bool _isMuted = false;
   bool _isFrontCamera = false;
+  bool _isOffer = false;
+  String _ownerId = "";
   void _initRenderers() async {
     await _localRenderer.initialize();
     await _remoteRenderer.initialize();
@@ -36,7 +42,11 @@ class _LPeerConnectionState extends State<LPeerConnection> {
   void _createPeerConnection() async {
     Map<String, dynamic> _iceServers = {
       'iceServers': [
-        {'url': 'stun:stun.l.google.com:19302'},
+        {
+          'urls': 'turn:39.97.110.12:3478',
+          'username': "lym",
+          'credential': "123456"
+        },
       ]
     };
     final Map<String, dynamic> _config = {
@@ -59,7 +69,12 @@ class _LPeerConnectionState extends State<LPeerConnection> {
     }, _config);
     // _peerConnection.addTrack(track)
     _peerConnection!.onIceCandidate = (candidate) {
-      print('lym candidate :${candidate.toString()}');
+      // print('lym candidate :${candidate.toString()}');
+      var person = {
+        'type': 0,
+        'sdp': {'type': 2, 'candidate': candidate.toMap()},
+      };
+      _socketIOClient?.socket.emit('message', [_roomID, _ownerId, person]);
     };
     _peerConnection?.onAddTrack = (stream, track) {
       _remoteRenderer.srcObject = stream;
@@ -74,19 +89,6 @@ class _LPeerConnectionState extends State<LPeerConnection> {
           await _peerConnection!.addTrack(track, _localStream!);
       _senders.add(sender);
     });
-
-    var offer = await _peerConnection?.createOffer();
-    var person = {
-      'type': 'offer',
-      'sdp': {'type': offer?.type, 'sdp': offer?.sdp},
-    };
-
-    var json = jsonEncode(person);
-
-    _socketIOClient?.socket.emit('message', ['123456', person]);
-    _peerConnection?.setLocalDescription(offer!);
-
-    print('lym sdp:${offer?.sdp}');
   }
 
   @override
@@ -100,21 +102,18 @@ class _LPeerConnectionState extends State<LPeerConnection> {
   void deactivate() {
     super.deactivate();
     _disconnect();
-    _localRenderer?.dispose();
-    _remoteRenderer?.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    _socketIOClient ??=
-        ModalRoute.of(context)?.settings.arguments as SocketIOClient;
+    _initSignal(context);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Peer Connection'),
-        actions: <Widget>[
+        actions: const <Widget>[
           IconButton(
-            icon: const Icon(Icons.settings),
+            icon: Icon(Icons.settings),
             onPressed: null,
             tooltip: 'setup',
           ),
@@ -128,9 +127,9 @@ class _LPeerConnectionState extends State<LPeerConnection> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: <Widget>[
                     FloatingActionButton(
-                      child: const Icon(Icons.switch_camera),
                       tooltip: 'Camera',
                       onPressed: _switchCamera(),
+                      child: const Icon(Icons.switch_camera),
                     ),
                     // FloatingActionButton(
                     //   child: const Icon(Icons.desktop_mac),
@@ -153,7 +152,6 @@ class _LPeerConnectionState extends State<LPeerConnection> {
                   ]))
           : FloatingActionButton(
               onPressed: () {
-                _createPeerConnection();
                 _connection();
               },
               tooltip: 'join',
@@ -189,6 +187,40 @@ class _LPeerConnectionState extends State<LPeerConnection> {
         );
       }),
     );
+  }
+
+  void _createOffer() async {
+    var offer = await _peerConnection?.createOffer();
+    var person = {
+      'type': 0,
+      'sdp': {'type': offer?.type, 'sdp': offer?.sdp},
+    };
+
+    var json = jsonEncode(person);
+
+    _socketIOClient?.socket.emit('message', [_roomID, _ownerId, person]);
+    _peerConnection?.setLocalDescription(offer!);
+
+    print('lym offer sdp:${offer?.sdp}');
+  }
+
+  void _createAnswer() async {
+    var answer = await _peerConnection?.createAnswer();
+    var person = {
+      'type': 1,
+      'sdp': {'type': answer?.type, 'sdp': answer?.sdp},
+    };
+
+    var json = jsonEncode(person);
+
+    _socketIOClient?.socket.emit('message', [_roomID, _ownerId, person]);
+    _peerConnection?.setLocalDescription(answer!);
+
+    print('lym answer sdp:${answer?.sdp}');
+  }
+
+  void _setRemoteSdp(RTCSessionDescription sdp) async {
+    await _peerConnection?.setRemoteDescription(sdp);
   }
 
   Future<MediaStream> _createStream(String media, bool userScreen,
@@ -261,8 +293,17 @@ class _LPeerConnectionState extends State<LPeerConnection> {
     }
   }
 
-  void _connection() async {}
+  void _connection() async {
+    _socketIOClient?.socket.emitWithAck("join", _roomID, ack: (data) {
+      print(data);
+    });
+  }
+
   void _disconnect() async {
+    if (_socketIOClient != null) {
+      _socketIOClient?.socket
+          .emitWithAck("leave", [_roomID, _ownerId], ack: (data) {});
+    }
     if (_localStream != null) {
       _localStream!.getTracks().forEach((element) async {
         await element.stop();
@@ -277,5 +318,89 @@ class _LPeerConnectionState extends State<LPeerConnection> {
       _remoteRenderer.srcObject = null;
     }
     Navigator.pop(context);
+  }
+
+  _initSignal(BuildContext context) {
+    if (_socketIOClient != null) {
+      print("lym _initSignal 已经初始化了");
+      return;
+    }
+    LServerData data =
+        ModalRoute.of(context)?.settings.arguments as LServerData;
+    _socketIOClient = data.socketIOClient;
+    _roomID = data.roomId;
+    print("lym >>>>> _initSignal:${_roomID}");
+    _socketIOClient?.socket.on('joined', (data) {
+      // const {room, id} = data;
+      final String id = data["id"] as String;
+      final String room = data["room"] as String;
+      _createPeerConnection();
+      _ownerId = id;
+    });
+    _socketIOClient?.socket.on('otherJoined', (data) {
+      // const {room, id} = data;
+      final String id = data["id"] as String;
+      if (_ownerId == id) {
+        return;
+      }
+      final String room = data["room"] as String;
+      print("other joined id:$id ownerid:${_ownerId} room:${room}");
+      // outputArea.scrollTop = outputArea.scrollHeight;//窗口总是显示最后的内容
+      // outputArea.value = outputArea.value + 'otherJoined' + id + '\r';
+
+      // 初始化为webrtc 相关 这里只要对方一加入就 启动webrtc
+      _isOffer = true;
+      _createOffer();
+    });
+    _socketIOClient?.socket.on('leaved', (data) {
+      final String id = data["id"] as String;
+      if (_ownerId == id) {
+        return;
+      }
+      final String room = data["room"] as String;
+
+      // outputArea.scrollTop = outputArea.scrollHeight;//窗口总是显示最后的内容
+      // outputArea.value = outputArea.value + 'otherJoined' + id + '\r';
+
+      // 初始化为webrtc 相关 这里只要对方一加入就 启动webrtc
+      _isOffer = false;
+      _disconnect();
+      _socketIOClient?.disconnect();
+    });
+
+    _socketIOClient?.socket.on('message', (data) {
+      final String id = data["id"] as String;
+      if (_ownerId == id) {
+        return;
+      }
+
+      final Int type = data["type"] as Int;
+      switch (type) {
+        case 0: // offer
+          _isOffer = false;
+          _setRemoteSdp(
+              RTCSessionDescription(data['sdp']['sdp'], data['sdp']['type']));
+          _createAnswer();
+          break;
+        case 1: // answer
+          _isOffer = false;
+          _setRemoteSdp(
+              RTCSessionDescription(data['sdp']['sdp'], data['sdp']['type']));
+          break;
+        case 2: // candidate
+          _peerConnection
+              ?.addCandidate(RTCIceCandidate(
+                  data['sdp']['candidate']['candidate'],
+                  data['sdp']['candidate']['sdpMid'],
+                  data['sdp']['candidate']['sdpMLineIndex']))
+              .then((value) => () {})
+              .onError((error, stackTrace) => () {
+                    print('lym error:$error');
+                  });
+          break;
+        default:
+          print('lym message:$data');
+      }
+    });
   }
 }
