@@ -242,22 +242,22 @@ class _LPeerConnectionState extends State<LPeerConnection> {
     };
     late MediaStream stream;
     if (userScreen) {
-      if (WebRTC.platformIsDesktop) {
-        // final source = await showDialog<DesktopCapturerSource>(
-        //   context: context!,
-        //   builder: (context) => ScreenSelectDialog(),
-        // );
-        // stream = await navigator.mediaDevices.getDisplayMedia(<String, dynamic>{
-        //   'video': source == null
-        //       ? true
-        //       : {
-        //     'deviceId': {'exact': source.id},
-        //     'mandatory': {'frameRate': 30.0}
-        //   }
-        // });
-      } else {
-        stream = await navigator.mediaDevices.getDisplayMedia(mediaConstraints);
-      }
+      // if (WebRTC.platformIsDesktop) {
+      //   final source = await showDialog<DesktopCapturerSource>(
+      //     context: context!,
+      //     builder: (context) => ScreenSelectDialog(),
+      //   );
+      //   stream = await navigator.mediaDevices.getDisplayMedia(<String, dynamic>{
+      //     'video': source == null
+      //         ? true
+      //         : {
+      //       'deviceId': {'exact': source.id},
+      //       'mandatory': {'frameRate': 30.0}
+      //     }
+      //   });
+      // } else {
+      //   stream = await navigator.mediaDevices.getDisplayMedia(mediaConstraints);
+      // }
     } else {
       stream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
     }
