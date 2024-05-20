@@ -6,6 +6,8 @@ import 'package:webrtc_demo_flutter/LHomePage.dart';
 import 'package:webrtc_demo_flutter/depends/flutter-webrtc/lib/flutter_webrtc.dart';
 import 'package:webrtc_demo_flutter/network/socket_io_client.dart';
 
+import 'package:webrtc_demo_flutter/depends/flutter-webrtc/lib/src/native/media_stream_impl.dart';
+
 class LPeerConnection extends StatefulWidget {
   LPeerConnection({super.key});
 
@@ -24,7 +26,9 @@ class _LPeerConnectionState extends State<LPeerConnection> {
   RTCPeerConnection? _peerConnection;
   final RTCVideoRenderer _localRenderer = RTCVideoRenderer();
   final RTCVideoRenderer _remoteRenderer = RTCVideoRenderer();
-  final List<RTCRtpSender> _senders = <RTCRtpSender>[];
+
+  List<MediaStream> _remoteStreams = <MediaStream>[];
+  List<RTCRtpSender> _senders = <RTCRtpSender>[];
 
   MediaStream? _localStream;
   bool _inCalling = false;
@@ -34,12 +38,13 @@ class _LPeerConnectionState extends State<LPeerConnection> {
   bool _isFrontCamera = false;
   bool _isOffer = false;
   String _ownerId = "";
+  MediaStream? _remoteStream;
   void _initRenderers() async {
     await _localRenderer.initialize();
     await _remoteRenderer.initialize();
   }
 
-  void _createPeerConnection() async {
+  void _createPeerConnection(BuildContext context) async {
     if(_peerConnection != null){
       print("===> lym _peerConnection already ");
       return;
@@ -66,12 +71,15 @@ class _LPeerConnectionState extends State<LPeerConnection> {
       },
       'optional': [],
     };
-    String sdpSemantics = 'unified-plan';
+    // String sdpSemantics = 'unified-plan';
+    String sdpSemantics = 'plan-b';
+    _localStream =
+    await _createStream('video', false, context: context);
+
     _peerConnection = await createPeerConnection({
       ..._iceServers,
       ...{'sdpSemantics': sdpSemantics}
     }, _config);
-    // _peerConnection.addTrack(track)
     _peerConnection!.onIceCandidate = (candidate) {
       // print('lym candidate :${candidate.toString()}');
       var person = {
@@ -82,19 +90,52 @@ class _LPeerConnectionState extends State<LPeerConnection> {
       };
       _socketIOClient?.socket.emit('message', person);
     };
-    _peerConnection?.onAddTrack = (stream, track) {
-      _remoteRenderer.srcObject = stream;
-      setState(() {});
+    switch (sdpSemantics) {
+      case 'plan-b':
+        _peerConnection?.onAddStream = (MediaStream stream) {
+          _remoteRenderer.srcObject = stream;
+          setState(() {});
+          _remoteStreams.add(stream);
+        };
+        await _peerConnection!.addStream(_localStream!);
+        break;
+      case 'unified-plan':
+      // Unified-Plan
+      // _peerConnection?.onAddStream = (MediaStream stream) {
+      //       //   _remoteRenderer.srcObject = stream;
+      //       // };
+      //       // _peerConnection?.onAddTrack = (stream,track) {
+      //       //   _remoteRenderer.srcObject = stream;
+      //       // };
+        _peerConnection?.onTrack = (event) {
+          if (event.track.kind == 'video') {
+            if(event.streams.isNotEmpty){
+              _remoteRenderer.srcObject = event.streams[0];
+              setState(() {});
+            }else{
+
+              // _remoteStream ??= MediaStreamNative(event.track.label!, event.track.id!);
+              // _remoteStream?.addTrack(event.track);
+              // _remoteRenderer.srcObject = _remoteStream;
+            }
+
+
+          }
+        };
+        _localStream!.getTracks().forEach((track) async {
+          _senders.add(await _peerConnection!.addTrack(track, _localStream!));
+        });
+        break;
+    }
+    _peerConnection?.onRemoveStream = (stream) {
+      _remoteRenderer.srcObject = null;
+      _remoteStreams.removeWhere((it) {
+        return (it.id == stream.id);
+      });
     };
-    _localStream = await _createStream('', false);
     _localRenderer.srcObject = _localStream;
     _inCalling = true;
     setState(() {});
-    _localStream!.getTracks().forEach((track) async {
-      RTCRtpSender sender =
-          await _peerConnection!.addTrack(track, _localStream!);
-      _senders.add(sender);
-    });
   }
 
   @override
@@ -144,7 +185,7 @@ class _LPeerConnectionState extends State<LPeerConnection> {
                     // ),
                     FloatingActionButton(
                       onPressed: () {
-                        // _disconnect();
+                        _disconnect();
                       },
                       tooltip: 'Hangup',
                       child: Icon(Icons.call_end),
@@ -207,7 +248,7 @@ class _LPeerConnectionState extends State<LPeerConnection> {
     var json = jsonEncode(person);
 
     _socketIOClient?.socket.emit('message', person);
-    _peerConnection?.setLocalDescription(offer!);
+    _peerConnection?.setLocalDescription(_fixSdp(offer!));
 
     print('lym offer sdp:${offer?.sdp}');
   }
@@ -225,7 +266,7 @@ class _LPeerConnectionState extends State<LPeerConnection> {
     var json = jsonEncode(person);
 
     _socketIOClient?.socket.emit('message', person);
-    _peerConnection?.setLocalDescription(answer!);
+    _peerConnection?.setLocalDescription(_fixSdp(answer!));
 
     print('lym answer sdp:${answer?.sdp}');
   }
@@ -298,10 +339,10 @@ class _LPeerConnectionState extends State<LPeerConnection> {
   // }
 
   _muteMic() {
-    // if (_localStream != null) {
-    //   bool enabled = _localStream!.getAudioTracks()[0].enabled;
-    //   _localStream!.getAudioTracks()[0].enabled = !enabled;
-    // }
+    if (_localStream != null) {
+      bool enabled = _localStream!.getAudioTracks()[0].enabled;
+      _localStream!.getAudioTracks()[0].enabled = !enabled;
+    }
   }
 
   void _connection() async {
@@ -313,7 +354,7 @@ class _LPeerConnectionState extends State<LPeerConnection> {
   void _disconnect() async {
     if (_socketIOClient != null) {
       _socketIOClient?.socket
-          .emitWithAck("leave", _roomID, ack: (data) {});
+          .emitWithAck("leave", {'roomId':_roomID, 'id':_ownerId}, ack: (data) {});
     }
     if (_localStream != null) {
       _localStream!.getTracks().forEach((element) async {
@@ -328,6 +369,7 @@ class _LPeerConnectionState extends State<LPeerConnection> {
       _localRenderer.srcObject = null;
       _remoteRenderer.srcObject = null;
     }
+    _senders.clear();
     Navigator.pop(context);
   }
 
@@ -346,7 +388,7 @@ class _LPeerConnectionState extends State<LPeerConnection> {
       // const {room, id} = data;
       final String id = data["id"] as String;
       final String room = data["roomId"] as String;
-      _createPeerConnection();
+      _createPeerConnection(context);
       _ownerId = id;
     });
     _socketIOClient?.socket.on('otherJoined', (data) {
@@ -391,7 +433,7 @@ class _LPeerConnectionState extends State<LPeerConnection> {
       final int type = data["type"] as int;
       switch (type) {
         case 0: // offer
-          _isOffer = false;
+          _isOffer = true;
           _setRemoteSdp(
               RTCSessionDescription(data['sdp']['sdp'], data['sdp']['type']));
           _createAnswer();
@@ -416,5 +458,13 @@ class _LPeerConnectionState extends State<LPeerConnection> {
           print('lym message:$data');
       }
     });
+  }
+
+  /*将H264设置成baseline*/
+  RTCSessionDescription _fixSdp(RTCSessionDescription s) {
+    var sdp = s.sdp;
+    s.sdp =
+        sdp!.replaceAll('profile-level-id=640c1f', 'profile-level-id=42e032');
+    return s;
   }
 }
