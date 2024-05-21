@@ -175,7 +175,7 @@ class _LPeerConnectionState extends State<LPeerConnection> {
                   children: <Widget>[
                     FloatingActionButton(
                       tooltip: 'Camera',
-                      onPressed: _switchCamera(),
+                      onPressed: _switchCamera,
                       child: const Icon(Icons.switch_camera),
                     ),
                     // FloatingActionButton(
@@ -184,17 +184,15 @@ class _LPeerConnectionState extends State<LPeerConnection> {
                     //   onPressed: () => selectScreenSourceDialog(context),
                     // ),
                     FloatingActionButton(
-                      onPressed: () {
-                        _disconnect();
-                      },
+                      onPressed: _disconnect,
                       tooltip: 'Hangup',
                       child: Icon(Icons.call_end),
                       backgroundColor: Colors.pink,
                     ),
                     FloatingActionButton(
-                      child: const Icon(Icons.mic_off),
+                      child: const Icon(Icons.mic),
                       tooltip: 'Mute Mic',
-                      onPressed: _muteMic(),
+                      onPressed: _muteMic,
                     )
                   ]))
           : FloatingActionButton(
@@ -319,11 +317,11 @@ class _LPeerConnectionState extends State<LPeerConnection> {
   }
 
   _switchCamera() {
-    // print("====>_switchCamera1");
-    // if (_localStream != null) {
-    //   print("====>_switchCamera2");
-    //   Helper.switchCamera(_localStream!.getVideoTracks()[0]);
-    // }
+    print("====>_switchCamera1");
+    if (_localStream != null) {
+      print("====>_switchCamera2");
+      Helper.switchCamera(_localStream!.getVideoTracks()[0]);
+    }
   }
 
   //  _switchToScreenSharing(MediaStream stream) {
