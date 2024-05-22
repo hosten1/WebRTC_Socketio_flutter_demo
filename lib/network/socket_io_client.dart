@@ -38,9 +38,7 @@ class SocketIOClient {
   }
 
   void disconnect() {
-    if (socket != null) {
-      socket.disconnect();
-    }
+    socket.dispose();
   }
 
   void sendMessage(String method, String message) {
@@ -55,21 +53,9 @@ class SocketIOClient {
   }
 
   Future<bool> _connect() async {
-    bool connected = false;
-    socket.onConnect((_) async {
-      print('Connected successfully!!!');
-      connected = true;
-    });
 
-    socket.on('connect_error', (data) {
-      print('Connect error: $data');
-    });
 
-    socket.on('connect_timeout', (data) {
-      print('Connect timeout: $data');
-    });
-
-    await socket.connect();
-    return connected;
+    socket.connect();
+    return true;
   }
 }

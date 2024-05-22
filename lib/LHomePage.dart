@@ -3,20 +3,16 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:webrtc_demo_flutter/peerConnectPage.dart';
 
-import 'network/socket_io_client.dart';
-
 class LServerData {
   final String roomId;
   final String? serverAddr;
-  final SocketIOClient? socketIOClient; 
 
-  LServerData({required this.roomId,this.serverAddr, this.socketIOClient});
+  LServerData({required this.roomId,this.serverAddr});
 
   Map<String, dynamic> toMap() {
     return {
       'roomId': roomId,
       'serverAddr': serverAddr,
-      'socketIOClient': this.socketIOClient,
     };
   }
 
@@ -24,30 +20,32 @@ class LServerData {
     return LServerData(
       roomId: map['roomId'] ?? '',
       serverAddr: map['serverAddr'] ?? '',
-      socketIOClient: map['socketIOClient'] ?? '',
     );
   }
 }//class LServerData 
 
 class LApp extends StatelessWidget {
   const LApp({super.key});
-
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      routes: {
+      routes: <String, WidgetBuilder>{
         '/': (context) => const  LHomePage(title: 'WebRTC Demo'),
-        LPeerConnection.routeName: (context) =>  LPeerConnection(),
       },
       title: 'Flutter Demo',
       theme: ThemeData(
         primarySwatch: Colors.blue,
+        primaryColor: const Color(0xFF303030),
+        scaffoldBackgroundColor: const Color(0xFFebebeb),
+        cardColor: const Color(0xFF393a3f),
       ),
       // home: const LHomePage(title: 'WebRTC Demo'),
     );
   }
 }
+
+
 
 class LHomePage extends StatefulWidget {
   const LHomePage({super.key, required this.title});
@@ -62,17 +60,16 @@ class _MyHomePageState extends State<LHomePage> {
   final TextEditingController _roomController = TextEditingController(text: "123456");
 
  final TextEditingController _serverAddrController = TextEditingController(text: "39.97.110.12:443");
+  late String serverAddr;
+  late String roomId ;
 
 
   @override
   void dispose() {
     _roomController.dispose();
     _serverAddrController.dispose();
-    _socketIOClient.disconnect();
     super.dispose();
   }
-
-  late SocketIOClient _socketIOClient ;
 
   @override
   Widget build(BuildContext context) {
@@ -102,45 +99,59 @@ class _MyHomePageState extends State<LHomePage> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround ,
           children: [
-            ElevatedButton(
-              onPressed: () {
-                // 获取输入的文本
-                print("按钮被点击了....");
-                String inputText = _serverAddrController.text;
-                if (inputText.isNotEmpty) {
-                  if (inputText.startsWith('https://') || inputText.startsWith('http://')) {
-                    // 输入文本不为空且以 "https://" 或 "http://" 开头
-                    print('Valid URL: $inputText');
-                    inputText = inputText;
-                  } else {
-                    // 输入文本不为空但不是以 "https://" 或 "http://" 开头
-                    print('Invalid URL: $inputText');
-                    inputText = "https://$inputText";
-                  }
-                } else {
-                  // 输入文本为空
-                  print('Input text is empty.');
-                }
-                print('Input Text: $inputText');
-
-                _socketIOClient = SocketIOClient(urlStr: inputText);
-                if (!_socketIOClient.socket.connected) {
-                  _socketIOClient.connect();
-
-                }
-              },
-              child: const Text("连接房间"),
-            ),
+            // ElevatedButton(
+            //   onPressed: () {
+            //     // 获取输入的文本
+            //     print("按钮被点击了....");
+            //     String inputText = _serverAddrController.text;
+            //     if (inputText.isNotEmpty) {
+            //       if (inputText.startsWith('https://') || inputText.startsWith('http://')) {
+            //         // 输入文本不为空且以 "https://" 或 "http://" 开头
+            //         print('Valid URL: $inputText');
+            //         inputText = inputText;
+            //       } else {
+            //         // 输入文本不为空但不是以 "https://" 或 "http://" 开头
+            //         print('Invalid URL: $inputText');
+            //         inputText = "https://$inputText";
+            //       }
+            //       serverAddr = inputText;
+            //     } else {
+            //       // 输入文本为空
+            //       print('Input text is empty.');
+            //     }
+            //     print('Input Text: $inputText');
+            //   },
+            //   child: const Text("连接房间"),
+            // ),
             ElevatedButton(
                 onPressed: (){
+                  String inputText = _serverAddrController.text;
+                  if (inputText.isNotEmpty) {
+                      if (inputText.startsWith('https://') || inputText.startsWith('http://')) {
+                                // 输入文本不为空且以 "https://" 或 "http://" 开头
+                                print('Valid URL: $inputText');
+                                inputText = inputText;
+                       } else {
+                            // 输入文本不为空但不是以 "https://" 或 "http://" 开头
+                            print('Invalid URL: $inputText');
+                            inputText = "https://$inputText";
+                        }
+                        serverAddr = inputText;
+                  } else {
+                        // 输入文本为空
+                        print('Input text is empty.');
+                  }
                   String inputText1 = _roomController.text;
                   print('Input Text: $inputText1');
+                  roomId = inputText1;
                   if(inputText1.isNotEmpty){
-                    // _socketIOClient.socket.emit('join', inputText1);
-                    Navigator.pushNamed(context, LPeerConnection.routeName, arguments: LServerData(roomId: inputText1,socketIOClient: _socketIOClient));
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => LPeerConnection(roomID: roomId, serverAddr: serverAddr)),
+                    );
                   }
                 },
-                child: const Text("加入房间")
+                child: const Text("确定信息")
             )
           ],
         ),
