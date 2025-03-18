@@ -7,6 +7,8 @@ import 'package:webrtc_demo_flutter/network/socket_io_client.dart';
 
 import 'package:webrtc_demo_flutter/signaling.dart';
 
+import 'package:webrtc_demo_flutter/peerConnectionClient.dart';
+
 class LPeerConnection extends StatefulWidget {
   const LPeerConnection({super.key,required this.roomID,required this.serverAddr});
   final String roomID ;
@@ -21,6 +23,7 @@ class LPeerConnection extends StatefulWidget {
 class _LPeerConnectionState extends State<LPeerConnection> {
 
    Signaling? _signaling;
+   PeerConnectionClient _peerConnectionClient = PeerConnectionClient();
     List<dynamic> _peers = [];
     String? _selfId;
 
@@ -160,12 +163,12 @@ class _LPeerConnectionState extends State<LPeerConnection> {
        }
      };
 
-     _signaling?.onCallStateChange = (Session session, CallState state) async {
+     _signaling?.onCallStateChange = (CallState state) async {
        switch (state) {
          case CallState.CallStateNew:
            setState(() {
              _inCalling = true;
-             _session = session;
+             // _session = session;
            });
            break;
          case CallState.CallStateRinging:
@@ -206,39 +209,48 @@ class _LPeerConnectionState extends State<LPeerConnection> {
          case CallState.CallStateRinging:
        }
      };
+     _signaling?.onCallOfferSdpMsg = ((String sdp,String type) {
 
-     _signaling?.onPeersUpdate = ((event) {
-       setState(() {
-         _selfId = event['self'];
-         _peers = event['peers'];
-       });
      });
+     _signaling?.onCallAnswerSdpMsg = ((String sdp,String type) {
 
-     _signaling?.onLocalStream = ((stream) {
+     });
+     _signaling?.onCallCandidateMsg = ((String candidate,Int sdpMLineIndex,String sdpMid) {
+
+     });
+     // _signaling?.onPeersUpdate = ((event) {
+     //   setState(() {
+     //     _selfId = event['self'];
+     //     _peers = event['peers'];
+     //   });
+     // });
+     //
+     _peerConnectionClient.onLocalStream = ((stream) {
        _localRenderer.srcObject = stream;
        setState(() {});
      });
 
-     _signaling?.onAddRemoteStream = ((_, stream) {
+     _peerConnectionClient.onAddRemoteStream = ((_, stream) {
        _remoteRenderer.srcObject = stream;
        setState(() {});
      });
 
-     _signaling?.onRemoveRemoteStream = ((_, stream) {
+     _peerConnectionClient.onRemoveRemoteStream = ((_, stream) {
        _remoteRenderer.srcObject = null;
      });
    }
 
    _hangUp() {
     print('lym>>>> hungup');
+    _peerConnectionClient.closePeerConnection();
     _signaling?.close();
     Navigator.of(context).pop(true);
    }
    _muteMic() {
-     _signaling?.muteMic();
+     _peerConnectionClient.muteMic();
    }
 
    _switchCamera() {
-     _signaling?.switchCamera();
+     _peerConnectionClient.switchCamera();
    }
 }
