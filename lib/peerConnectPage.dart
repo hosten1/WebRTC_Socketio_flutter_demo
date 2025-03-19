@@ -153,92 +153,139 @@ class _LPeerConnectionState extends State<LPeerConnection> {
      await _remoteRenderer.initialize();
    }
    void _connect(BuildContext context) async {
+     // 1. 初始化socketio
      _signaling ??= Signaling(widget.serverAddr,widget.roomID, context)..connect();
+     // 2. 监听信令和服务连接的状态
      _signaling?.onSignalingStateChange = (SignalingState state) {
        switch (state) {
          case SignalingState.ConnectionClosed:
          case SignalingState.ConnectionError:
+           break;
          case SignalingState.ConnectionOpen:
+           _peerConnectionClient?.createPeerconnection(context);
            break;
        }
      };
-
+    // 3. 监听信令消息
      _signaling?.onCallStateChange = (CallState state) async {
        switch (state) {
          case CallState.CallStateNew:
-           setState(() {
-             _inCalling = true;
-             // _session = session;
-           });
-           break;
+           {
+             setState(() {
+               _inCalling = true;
+               // _session = session;
+             });
+             break;
+           }
          case CallState.CallStateRinging:
-         // bool? accept = await _showAcceptDialog();
-           setState(() {
-             _inCalling = true;
-           });
-           break;
+           {
+             // bool? accept = await _showAcceptDialog();
+             setState(() {
+               _inCalling = true;
+             });
+             break;
+           }
          case CallState.CallStateBye:
-           if (_waitAccept) {
-             print('peer reject');
-
-           }
-           setState(() {
-             _localRenderer.srcObject = null;
-             _remoteRenderer.srcObject = null;
-             _inCalling = false;
-             _session = null;
-           });
-           _signaling?.close();
-           _waitAccept = false;
-           Navigator.of(context).pop(true);
-           break;
-         case CallState.CallStateInvite:
-           _waitAccept = true;
-           // _showInvateDialog();
-           break;
-         case CallState.CallStateConnected:
-           if (_waitAccept) {
+           {
+             if (_waitAccept) {
+               print('peer reject');
+             }
+             setState(() {
+               _localRenderer.srcObject = null;
+               _remoteRenderer.srcObject = null;
+               _inCalling = false;
+               _session = null;
+             });
+             _signaling?.close();
              _waitAccept = false;
-             // Navigator.of(context).pop(false);
+             Navigator.of(context).pop(true);
+             break;
            }
-           setState(() {
-             _inCalling = true;
-           });
+         case CallState.CallStateInvite:
+           {
+             _waitAccept = true;
+             _peerConnectionClient?.createOffer();
 
-           break;
-         case CallState.CallStateRinging:
+             // _showInvateDialog();
+             break;
+           }
+         case CallState.CallStateConnected:
+           {
+             if (_waitAccept) {
+               _waitAccept = false;
+               // Navigator.of(context).pop(false);
+             }
+             setState(() {
+               _inCalling = true;
+             });
+
+             break;
+           }
        }
      };
+     // 4. 收到offer消息
      _signaling?.onCallOfferSdpMsg = ((String sdp,String type) {
-
+       //输出 sdp 信息
+       print('lym onCallOfferSdpMsg type: $type  _peerConnectionClient: $_peerConnectionClient ');
+        _peerConnectionClient.receiveOfferSdp(sdp, type);
+       print('lym onCallOfferSdpMsg type: $type  _peerConnectionClient: $_peerConnectionClient  end');
      });
+     // 5. 收到answer消息
      _signaling?.onCallAnswerSdpMsg = ((String sdp,String type) {
+       print('lym onCallAnswerSdpMsg type: $type  _peerConnectionClient: $_peerConnectionClient');
+       _peerConnectionClient.receiveAnswerSdp(sdp, type);
 
      });
-     _signaling?.onCallCandidateMsg = ((String candidate,Int sdpMLineIndex,String sdpMid) {
-
+     // 5. 收到ice消息
+     _signaling?.onCallCandidateMsg = ((String candidate,int sdpMLineIndex,String sdpMid) {
+       _peerConnectionClient.receiveCandidate(candidate, sdpMLineIndex, sdpMid);
      });
-     // _signaling?.onPeersUpdate = ((event) {
-     //   setState(() {
-     //     _selfId = event['self'];
-     //     _peers = event['peers'];
-     //   });
-     // });
-     //
+     // 6. 本地视频显示到界面
      _peerConnectionClient.onLocalStream = ((stream) {
        _localRenderer.srcObject = stream;
        setState(() {});
      });
-
+     // 7. 远端视频显示到界面
      _peerConnectionClient.onAddRemoteStream = ((_, stream) {
        _remoteRenderer.srcObject = stream;
        setState(() {});
      });
-
+    // 8. 远端视频移除
      _peerConnectionClient.onRemoveRemoteStream = ((_, stream) {
        _remoteRenderer.srcObject = null;
      });
+     // 9. 返回WebRTC的offer消息，通过服务发送给对端
+     _peerConnectionClient.onCreateOffer = ((String sdp,String type){
+       _signaling?.send('message', {'type': 0,
+         'sdp': {
+           'sdp': sdp,
+           'type': type,
+         }
+       });
+     });
+     // 10. 返回WebRTC的answer消息，通过服务发送给对端
+     _peerConnectionClient.onCreateAnswer = ((String sdp,String type){
+       _signaling?.send('message', {'type': 1,
+         'sdp': {
+           'sdp': sdp,
+           'type': type,
+         }
+       });
+     });
+     // 11. 返回WebRTC的ice消息，通过服务发送给对端
+     _peerConnectionClient.onIceCandidate = ((String candidate,int sdpMLineIndex,String sdpMid){
+         _signaling?.send('message', {'type': 2,
+         'candidate': {
+             'candidate': candidate,
+             'sdpMLineIndex': sdpMLineIndex,
+             'sdpMid': sdpMid,
+         }
+         });
+     });
+
+
    }
+
 
    _hangUp() {
     print('lym>>>> hungup');

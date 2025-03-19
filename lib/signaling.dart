@@ -1,8 +1,19 @@
 import 'dart:async';
-import 'dart:ffi';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:webrtc_demo_flutter/depends/socket.io-client-dart/lib/socket_io_client.dart';
 import 'network/socket_io_client.dart';
+
+class MyHttpOverrides extends HttpOverrides {
+  @override
+  HttpClient createHttpClient(SecurityContext? context) {
+    return super.createHttpClient(context)
+      ..badCertificateCallback = (X509Certificate cert, String host, int port) {
+        // 接受所有证书，包括自签名证书
+        return true;
+      };
+  }
+}
 
 enum SignalingState {
   ConnectionOpen,
@@ -34,7 +45,7 @@ class Signaling {
   Function(CallState state)? onCallStateChange;
   Function(String sdp,String type)? onCallOfferSdpMsg;
   Function(String sdp,String type)? onCallAnswerSdpMsg;
-  Function(String candidate,Int sdpMLineIndex,String sdpMid)? onCallCandidateMsg;
+  Function(String candidate,int sdpMLineIndex,String sdpMid)? onCallCandidateMsg;
 
   close() async {
     await _cleanSessions();
@@ -79,11 +90,11 @@ class Signaling {
     });
 
     _socketIOClient?.socket.on('connect_error', (data) {
-      print('Connect error: $data');
+      print('lym >>>> Connect error: $data');
     });
 
     _socketIOClient?.socket.on('connect_timeout', (data) {
-      print('Connect timeout: $data');
+      print('lym >>>> Connect timeout: $data');
     });
     _socketIOClient?.socket.on('joined', (data) {
       print("lym >>>>> joined:${data}");
@@ -101,7 +112,7 @@ class Signaling {
         return;
       }
       final String room = data["roomId"] as String;
-      print("other joined id:$id ownerid:${_selfId} room:${room}");
+      print("lym >>>>> otherJoined id:$id ownerid:${_selfId} room:${room}");
       onCallStateChange?.call(CallState.CallStateInvite);
       // outputArea.scrollTop = outputArea.scrollHeight;//窗口总是显示最后的内容
       // outputArea.value = outputArea.value + 'otherJoined' + id + '\r';
@@ -124,9 +135,10 @@ class Signaling {
     });
 
     _socketIOClient?.socket.on('message', (data) async {
-      print("lym >>>>> message:${data}");
       final String id = data["id"] as String;
       if (_selfId == id) {
+        // 输出错误信息  表示和自己的id 相同的消息不处
+        print("lym >>>>> err message:_selfId is ${_selfId}");
         return;
       }
 
@@ -134,14 +146,16 @@ class Signaling {
       switch (type) {
         case 0:
           { // offer
+            print("lym >>>>> message offer:${data}");
 
-            onCallStateChange?.call(CallState.CallStateNew);
+            // onCallStateChange?.call(CallState.CallStateNew);
             onCallStateChange?.call(CallState.CallStateRinging);
             onCallOfferSdpMsg?.call(data['sdp']['sdp'],data['sdp']['type']);
 
             break;
           }
         case 1: // answer
+          print("lym >>>>> message answer:${data}");
 
           onCallStateChange?.call(CallState.CallStateConnected);
           onCallAnswerSdpMsg?.call(data['sdp']['sdp'],data['sdp']['type']);
@@ -158,7 +172,7 @@ class Signaling {
   }
 
 
-  _send(event, data) {
+  send(event, data) {
     var person = {
       'roomId': _roomId,
       'id': _selfId,
